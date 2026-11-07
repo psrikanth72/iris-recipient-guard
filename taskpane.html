@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IRIS Recipient Guard</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<script src="guard.js"></script>
+<style>
+  :root { --ok:#107c10; --bad:#c50f1f; --warn:#8a5a00; --line:#e1e1e1; --muted:#616161; --brand:#0b3d91; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 13px/1.45 "Segoe UI", system-ui, sans-serif; color:#242424; }
+  header { background: var(--brand); color:#fff; padding:12px 14px; }
+  header h1 { margin:0; font-size:15px; font-weight:600; }
+  header .v { font-size:11px; opacity:.8; }
+  section { padding:10px 14px; border-bottom:1px solid var(--line); }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 6px; font-weight:600; }
+  .row { display:flex; justify-content:space-between; gap:8px; padding:2px 0; }
+  .row span:first-child { color:var(--muted); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-weight:600; font-size:12px; }
+  .ok { background:#dff6dd; color:var(--ok); }
+  .bad { background:#fde7e9; color:var(--bad); }
+  .warn { background:#fff4ce; color:var(--warn); }
+  .banner { margin:10px 14px 0; padding:8px 10px; border-radius:4px; font-size:12px; }
+  .banner.bad { border:1px solid #f1bbbc; }
+  input[type=search] { width:100%; padding:6px 8px; border:1px solid #c7c7c7; border-radius:4px; font:inherit; }
+  ul.list { list-style:none; margin:6px 0 0; padding:0; max-height:220px; overflow:auto; border:1px solid var(--line); border-radius:4px; }
+  ul.list li { padding:6px 8px; cursor:pointer; border-bottom:1px solid #f3f3f3; }
+  ul.list li:hover, ul.list li:focus { background:#eef3fb; outline:none; }
+  ul.list li small { color:var(--muted); }
+  button { font:inherit; padding:6px 12px; border-radius:4px; border:1px solid var(--brand); background:var(--brand); color:#fff; cursor:pointer; }
+  button.secondary { background:#fff; color:var(--brand); }
+  ul.problems { margin:6px 0 0; padding-left:18px; }
+  ul.problems li { margin-bottom:4px; }
+  .muted { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>IRIS Recipient Guard</h1>
+  <div class="v">Version <span id="ver"></span></div>
+</header>
+
+<div id="sampleBanner" class="banner bad" hidden>
+  <b>Sample client list in use.</b> Real client emails will be blocked until IT sets the live client-list address.
+</div>
+
+<section>
+  <h2>Protection status</h2>
+  <div class="row"><span>Send check</span><span id="stSend" class="pill warn">Checking…</span></div>
+  <div class="row"><span>Client list</span><span id="stRepo" class="pill warn">Connecting…</span></div>
+  <div class="row"><span>Clients / contacts</span><span id="stCounts">–</span></div>
+  <div class="row"><span>Last refreshed</span><span id="stTime">–</span></div>
+  <div class="muted" id="stErr"></div>
+</section>
+
+<section>
+  <h2>This email</h2>
+  <div class="row"><span>Type</span><span id="emMode">–</span></div>
+  <div class="row"><span>Client</span><span id="emCompany">–</span></div>
+  <div style="margin-top:8px; display:flex; gap:6px;">
+    <button id="btnCheck">Check this email now</button>
+    <button id="btnRefresh" class="secondary">Refresh list</button>
+  </div>
+  <div id="checkResult" style="margin-top:8px;"></div>
+</section>
+
+<section id="pickSection">
+  <h2>Pick company</h2>
+  <div class="muted">Choose the client, or type its name at the start of the subject. Their contacts are added to To automatically.</div>
+  <input type="search" id="search" placeholder="Search clients…" style="margin-top:6px;" />
+  <ul class="list" id="companyList"></ul>
+</section>
+
+<script>
+(function () {
+  var repo = null, lastSubject = null, mode = "unknown";
+  var $ = function (id) { return document.getElementById(id); };
+  var modeLabel = { "new": "New email", reply: "Reply / Reply all", forward: "Forward", unknown: "–" };
+
+  function setPill(el, cls, text) { el.className = "pill " + cls; el.textContent = text; }
+
+  function loadRepo(fresh) {
+    setPill($("stRepo"), "warn", "Connecting…");
+    return rgLoadRepository(fresh).then(function (r) {
+      repo = r;
+      setPill($("stRepo"), "ok", "Connected");
+      $("stCounts").textContent = r.companyCount + " / " + r.contactCount + (r.inactiveCount ? " (" + r.inactiveCount + " inactive)" : "");
+      $("stTime").textContent = r.loadedAt.toLocaleTimeString();
+      $("stErr").textContent = r.conflicts.length ? "Warning: listed under two clients, treated as unknown: " + r.conflicts.join(", ") : "";
+      renderList();
+      refreshEmail();
+    }, function (e) {
+      repo = null;
+      setPill($("stRepo"), "bad", "Not reachable");
+      $("stErr").textContent = (e && e.message ? e.message : String(e)) + " — emails to clients will be blocked until the list can be loaded.";
+    });
+  }
+
+  function renderList() {
+    var ul = $("companyList"); ul.innerHTML = "";
+    if (!repo) return;
+    var q = rgNorm($("search").value);
+    var keys = repo.sortedKeys.slice().sort(function (a, b) { return repo.companies[a].name.localeCompare(repo.companies[b].name); });
+    keys.filter(function (k) { return !q || k.indexOf(q) >= 0; }).slice(0, 200).forEach(function (k) {
+      var c = repo.companies[k];
+      var li = document.createElement("li");
+      li.tabIndex = 0;
+      li.innerHTML = "<div></div><small></small>";
+      li.firstChild.textContent = c.name;
+      li.lastChild.textContent = c.emails.length + " contact(s)";
+      li.onclick = li.onkeydown = function (ev) {
+        if (ev.type === "keydown" && ev.key !== "Enter") return;
+        pick(k);
+      };
+      ul.appendChild(li);
+    });
+  }
+
+  function pick(key) {
+    if (mode !== "new") { $("checkResult").innerHTML = "<div class='muted'>Company can only be picked on a new email.</div>"; return; }
+    rgGetSubject().then(function (s) {
+      return rgSetSubject(rgSubjectWithCompany(repo, s, key));
+    }).then(function () { return rgEnforce("pane"); }).then(refreshEmail);
+  }
+
+  function refreshEmail() {
+    Promise.all([rgGetComposeType(), rgGetSubject(), rgSessionGet("rg_thread")]).then(function (v) {
+      mode = rgModeOf(v[0]);
+      $("emMode").textContent = modeLabel[mode] || "–";
+      $("pickSection").style.display = mode === "new" ? "" : "none";
+      if (!repo) { $("emCompany").textContent = "–"; return; }
+      var c = rgDetermineCompany(repo, mode, v[1], v[2]);
+      $("emCompany").textContent = c.key ? repo.companies[c.key].name : (mode === "forward" ? "Internal only" : "Not identified");
+    }).catch(function () {});
+  }
+
+  function runCheck() {
+    var box = $("checkResult");
+    box.innerHTML = "<div class='muted'>Checking…</div>";
+    rgRunSendCheck().then(function (res) {
+      if (res.allow) {
+        box.innerHTML = "<span class='pill ok'>Ready to send</span>";
+      } else {
+        box.innerHTML = "<span class='pill bad'>Will be blocked</span><ul class='problems'></ul>";
+        var ul = box.querySelector("ul");
+        res.problems.forEach(function (p) { var li = document.createElement("li"); li.textContent = p; ul.appendChild(li); });
+      }
+    }, function (e) {
+      box.innerHTML = "<span class='pill bad'>Will be blocked</span><div class='muted'></div>";
+      box.querySelector("div").textContent = "Checks could not complete: " + (e && e.message ? e.message : e);
+    });
+  }
+
+  // Outlook has no "subject changed" event, so the pane watches the subject.
+  // Also re-checks recipients every few seconds as a safety net in case Outlook
+  // skipped a "recipients changed" event.
+  var ticks = 0;
+  function watchSubject() {
+    rgGetSubject().then(function (s) {
+      ticks++;
+      if (s !== lastSubject || ticks % 3 === 0) {
+        var changed = s !== lastSubject;
+        lastSubject = s;
+        return rgEnforce(changed ? "subject" : "poll").then(function () { if (changed) refreshEmail(); });
+      }
+    }).catch(function () {}).then(function () { setTimeout(watchSubject, 1000); });
+  }
+
+  Office.onReady(function () {
+    $("ver").textContent = RG_CONFIG.VERSION;
+    $("sampleBanner").hidden = RG_CONFIG.REPOSITORY_URL !== RG_CONFIG.SAMPLE_REPOSITORY_URL;
+    var sendOk = Office.context.requirements.isSetSupported("Mailbox", "1.12");
+    setPill($("stSend"), sendOk ? "ok" : "bad", sendOk ? "Active" : "Not supported – update Outlook");
+    $("btnCheck").onclick = runCheck;
+    $("btnRefresh").onclick = function () { loadRepo(true); };
+    $("search").oninput = renderList;
+    loadRepo(true).then(function () { watchSubject(); });
+    setInterval(function () { loadRepo(true); }, 5 * 60 * 1000);
+  });
+})();
+</script>
+</body>
+</html>
