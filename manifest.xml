@@ -12,8 +12,8 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="IRIS Recipient Guard"/>
   <Description DefaultValue="Checks recipients, client and attachments before an email leaves IRIS, to prevent sending client data to the wrong person."/>
-  <IconUrl DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/assets/icon-64.png"/>
-  <HighResolutionIconUrl DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/assets/icon-128.png"/>
+  <IconUrl DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/icon-128.png"/>
   <SupportUrl DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/"/>
   <AppDomains>
     <AppDomain>https://psrikanth72.github.io</AppDomain>
@@ -95,9 +95,9 @@
       </Hosts>
       <Resources>
         <bt:Images>
-          <bt:Image id="Icon.16x16" DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/assets/icon-16.png"/>
-          <bt:Image id="Icon.32x32" DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/assets/icon-32.png"/>
-          <bt:Image id="Icon.80x80" DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/assets/icon-80.png"/>
+          <bt:Image id="Icon.16x16" DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/icon-16.png"/>
+          <bt:Image id="Icon.32x32" DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/icon-32.png"/>
+          <bt:Image id="Icon.80x80" DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/icon-80.png"/>
         </bt:Images>
         <bt:Urls>
           <bt:Url id="WebViewRuntime.Url" DefaultValue="https://psrikanth72.github.io/iris-recipient-guard/commands.html"/>
